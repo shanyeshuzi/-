@@ -8,7 +8,7 @@
 // All code lisencable under the GPL.
 // Code version 0.0.2
 // check for cached version of url
-const  SERVERPATH="http://www.shendeng.cn/phproxy";
+const  SERVERPATH="https://nanxiao.cba123.cn/onlineget";
 const SERVERCACHE="/var/www/cache/";
 const SERVERLOGS="/var/www/logs/pages.log";
 const iscache=true;

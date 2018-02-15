@@ -6,7 +6,7 @@
 //
 // All code lisencable under the GPL.
 // Code version 0.0.2
-const  SERVERPATH="http://www.shendeng.cn/phproxy";
+const  SERVERPATH="https://nanxiao.cba123.cn/onlineget";
 const SERVERCACHE="/var/www/cache/";
 // see if we have a cache of this file
 $url = $_GET['url'];
