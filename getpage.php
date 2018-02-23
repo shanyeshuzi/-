@@ -11,15 +11,19 @@ class Request{
     protected $postData;
     protected $type;
     protected $http_code;
-    public function  recevieFromClient($url,$header,$postdata=[]){//获得客户端的请求
-        global  $host,$base_url;
+    protected $tokenPar;
+    public function  recevieFromClient(){//获得客户端的请求
+        $this->tokenPar = "a8TrVNqPbI";//token密钥
+        $url=base64_decode($_GET['url']);
+        if (md5($_GET['url'] . $this->tokenPar) != $_GET['token']) {
+           // exit("ERROR");
+        }
         $this->url=$url;
         $temp_arrr = explode('/', $url);
         array_pop($temp_arrr);
         $base_url = implode('/', $temp_arrr);
         $this->base_url = $base_url . '/';
         preg_match("/^(http:\/\/)?([^\/]+)/i", $url, $matches);
-        $host=$matches[2];
         $this->host = $matches[2];
         $temp_array = explode("/", $url, 4);
         if (isset($temp_array[3])) {
@@ -27,13 +31,13 @@ class Request{
         } else {
             $this->path = "/";
         }
-        if(!empty($postdata)){
+        if(!empty($_POST)){
             $this->sMethod="POST";
-            $this->postData=$postdata;
+            $this->postData=$_POST;
         }else{
             $this->sMethod="GET";
         }
-        $this->requestHeader=$header;
+        $this->requestHeader=$this->getAllHeaders();
     }
     public function  beforeSend(){//发送前准备工作
         $tempHeader=[];
@@ -52,16 +56,16 @@ class Request{
         }
     }
     public function process(){//文档处理
-
         foreach ($this->responseHeader as $one){
             if(preg_match('/Content-Length/i',$one,$arr)){//remove the size of content
                 continue;
             }
-            if(preg_match('/Location/i',$one,$arr)){ //replace url in location
-                $tempheaderline=explode("Location:",$one);
+            if(preg_match('/location/i',strtolower($one),$arr)){ //replace url in location
+                $tempheaderline=explode("location:",strtolower($one));
                 if(count($tempheaderline) > 1){
                     $redirect_url = trim($tempheaderline[1]);
-                    header("Location: ".replaceUrl($redirect_url));
+                    header("Location: ".Request::replaceUrl($redirect_url,$this->host,$this->base_url,$this->tokenPar));
+                    exit();
                 }
             }
             if(preg_match('/Content-Type:/i',$one,$arr)){ //get type from Content-Type
@@ -77,10 +81,19 @@ class Request{
             header($one);
 
         }
+
         if(!in_array($this->type,['js','image','css'])){  //replace all url of xml
+            $parms['host']=$this->host;
+            $parms['base_url']=$this->base_url;
+            $parms['tokenPar']=$this->tokenPar;
             $this->responseData=preg_replace_callback(
                 '/((action|src|href)([\s]*)=([\s]*)[\'|"])([\s]*)([^\s]+)([\'|"])/i',
-                'SwitchXml',
+                function($match) use ($parms){
+                    $start=$match[1];
+                    $url=$match[6];
+                    $end=$match[7];
+                    return $start.Request::replaceUrl($url,$parms['host'],$parms['base_url'],$parms['tokenPar']).$end;
+                },
                 $this->responseData
             );
         }
@@ -133,50 +146,35 @@ class Request{
         $this->responseData= substr($result, $headerSize, strlen($result));
         curl_close($ch);
     }
-}
-function SwitchXml($match){
-    $start=$match[1];
-    $url=$match[6];
-    $end=$match[7];
-    return $start.replaceUrl($url).$end;
-}
-function replaceUrl($url){
-    //////////////////////////////////////////////
-    ///  相对于跟目录的相对路径          /XXX
-    ///  相对于执行脚本的相对路径        XXX
-    ///  绝对路径                        //XXX   http://    https://
-    /// //////////////////////////////////////////
-    global  $host,$base_url,$tokenPar;
-    if(preg_match("/^javascript:/",trim($url))){//javascript:   js 不替换
-        return $url;
-    }else if(preg_match("/^(http|https):\/\//",trim($url))){//   http://    https://
-        $baseUrl=base64_encode(trim($url));
-        return "getpage.php?token=".md5($baseUrl.$tokenPar)."&url=".$baseUrl;
-    }else if(preg_match("/^\/\//",trim($url))){//            //XXX
-        $baseUrl=base64_encode("http:".trim($url));
-        return "getpage.php?token=".md5($baseUrl.$tokenPar)."&url=".$baseUrl;
-    }else if(preg_match("/^\/$/",trim($url))){//     /
-        $baseUrl=base64_encode("http://$host".trim($url));
-        return "getpage.php?token=".md5($baseUrl.$tokenPar)."&url=".$baseUrl;
-    }else if(preg_match("/^\/[^\s]+/",trim($url))){//     /XXX
-        $baseUrl=base64_encode("http://$host".trim($url));
-        return "getpage.php?token=".md5($baseUrl.$tokenPar)."&url=".$baseUrl;
-    }else  if(preg_match("/^[^\.^\/^\#][^\s]+/",trim($url))) {//     XXX
-        $baseUrl=base64_encode($base_url.'/'.trim($url));
-        return "getpage.php?token=".md5($baseUrl.$tokenPar)."&url=".$baseUrl;
-    }else{
-        return $url;
+    public static function replaceUrl($url,$host,$base_url,$tokenPar){
+        //////////////////////////////////////////////
+        ///  相对于跟目录的相对路径          /XXX      /
+        ///  相对于执行脚本的相对路径        XXX     .     ..
+        ///  绝对路径                        //XXX   http://    https://
+        /// //////////////////////////////////////////
+        if(preg_match("/^(javascript:|data:)/",trim($url))){//        javascript:  data:  不替换
+            return $url;
+        }else if(preg_match("/^(http|https):\/\//",trim($url))){//    http://    https://
+            $baseUrl=base64_encode(trim($url));
+            return "getpage.php?token=".md5($baseUrl.$tokenPar)."&url=".$baseUrl;
+        }else if(preg_match("/^\/\//",trim($url))){//                //XXX
+            $baseUrl=base64_encode("http:".trim($url));
+            return "getpage.php?token=".md5($baseUrl.$tokenPar)."&url=".$baseUrl;
+        }else if(preg_match("/^\//",trim($url))){//                  /
+            $baseUrl=base64_encode("http://$host".trim($url));
+            return "getpage.php?token=".md5($baseUrl.$tokenPar)."&url=".$baseUrl;
+        }else  if(preg_match("/^[\w|\.][^\s]+/",trim($url))) {//     XXX
+            $baseUrl=base64_encode($base_url.'/'.trim($url));
+            return "getpage.php?token=".md5($baseUrl.$tokenPar)."&url=".$baseUrl;
+        }else{
+            return $url;
+        }
     }
 }
-$host="";
-$base_url="";
-$tokenPar = "a8TrVNqPbI";//token密钥
-$url=base64_decode($_GET['url']);
-if (md5($_GET['url'] . $tokenPar) != $_GET['token']) {
-    exit("ERROR");
-}
+
+
 $request=new Request();
-$request->recevieFromClient($url,$request->getAllHeaders(),$_POST);
+$request->recevieFromClient();
 $request->beforeSend();
 $request->sendToRemote();
 $request->process();
