@@ -16,7 +16,7 @@ class Request{
         $this->tokenPar = "a8TrVNqPbI";//token密钥
         $url=base64_decode($_GET['url']);
         if (md5($_GET['url'] . $this->tokenPar) != $_GET['token']) {
-           // exit("ERROR");
+            exit("ERROR");
         }
         $this->url=$url;
         $temp_arrr = explode('/', $url);
