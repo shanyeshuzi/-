@@ -60,8 +60,9 @@ class Request{
             if(preg_match('/Content-Length/i',$one,$arr)){//remove the size of content
                 continue;
             }
-            if(preg_match('/location/i',strtolower($one),$arr)){ //replace url in location
-                $tempheaderline=explode("location:",strtolower($one));
+            if(preg_match('/location/i',$one,$arr)){ //replace url in location
+                $location=$arr[0];
+                $tempheaderline=explode("$location:",$one);
                 if(count($tempheaderline) > 1){
                     $redirect_url = trim($tempheaderline[1]);
                     header("Location: ".Request::replaceUrl($redirect_url,$this->host,$this->base_url,$this->tokenPar));
@@ -81,7 +82,6 @@ class Request{
             header($one);
 
         }
-
         if(!in_array($this->type,['js','image','css'])){  //replace all url of xml
             $parms['host']=$this->host;
             $parms['base_url']=$this->base_url;
@@ -93,6 +93,22 @@ class Request{
                     $url=$match[6];
                     $end=$match[7];
                     return $start.Request::replaceUrl($url,$parms['host'],$parms['base_url'],$parms['tokenPar']).$end;
+                },
+                $this->responseData
+            );
+            $this->responseData=preg_replace_callback(
+                '/\<script\>[\w\W]*\<\/script\>/i',
+                function($match) use ($parms){
+                    return preg_replace_callback(
+                        '/([\'|"])((http:\/\/)[^\s]+)([\'|"])/i',
+                        function($match) use ($parms){
+                            $start=$match[1];
+                            $url=$match[2];
+                            $end=$match[4];
+                            return $start.Request::replaceUrl($url,$parms['host'],$parms['base_url'],$parms['tokenPar']).$end;
+                        },
+                        $match[0]
+                    );
                 },
                 $this->responseData
             );
